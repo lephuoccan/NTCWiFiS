@@ -30,12 +30,6 @@ typedef struct
 {
   int ADC_Raw;
   float ADC_Value;
-  float Voltage_G;
-  float Voltage_NTC;
   float Resistance;
-  float Temperature_K;
   float Temperature_C;
-  float VR1;
-  float VNTC;
-  float I;
 } NTC_Typedef;

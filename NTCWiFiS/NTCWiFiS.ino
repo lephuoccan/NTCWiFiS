@@ -11,14 +11,28 @@ iMCP3208 ADCi(14,12,13,NSS,spiClk);
 
 const float _ADC_MAX = 4095;         /* ADC 12bit */
 const float _T0 = 25.0;              /*  */
-const float _NTC_BETA = 3950.0;
+float _NTC_BETA = 3950.0;
+
 const float _R0 = 100000.0;
 const float _R1 = 10000.0;
 
+const float _R25 = 100000.0;
+const float _R50 = 35899.9;
+const float _R100 = 6710.0;
+const float _R150 = 1770.0;
+const float _R300 = 105.6;
+
+const float BETA25_50 = 3948.06;
+const float BETA50_100 = 4044.69;
+const float BETA100_150 = 4208.37;
+const float BETA150_300 = 4504.0;
+
+const float Comfilter = 0.99;
+NTC_Typedef NTC4;
 NTC_Typedef NTC1;
 NTC_Typedef NTC2;
 NTC_Typedef NTC3;
-NTC_Typedef NTC4;
+
 
 /*ADC Variables*/
 uint16_t ADC_Value; /*ADC value Read from ADC_pin ( analog mltiplexer)*/
@@ -45,40 +59,37 @@ void ADC_Process(void * parameter)
   UART_Debug.printf("ADC_Process is running on CPU %d\n", xPortGetCoreID());
   for(;;)
   {
-//    ADC_PWR_Val = Read_ADC_MultiSampling(PWR_Pin);
-//    vTaskDelay(1 / portTICK_PERIOD_MS);
-//    ADC_2500_Val = Read_ADC_MultiSampling(VREF_Pin);
-//    vTaskDelay(1 / portTICK_PERIOD_MS);
-//    NTC1.ADC_Raw = Read_ADC_MultiSampling(NTC1_Pin);
-//    NTC1.ADC_Value = 0.99*(NTC1.ADC_Value) + 0.01*((float)NTC1.ADC_Raw);
-//    NTC1.Voltage_G = map_value(NTC1.ADC_Value,ADC_2500_Val,4095,2.5,3.2);
-//    NTC1.VR1 = 3.329 - NTC1.Voltage_G;
-//    NTC1.I = NTC1.VR1 / R1;
-//    NTC1.Resistance = (NTC1.Voltage_G / NTC1.I) - R2;
-//    NTC1.VNTC = NTC1.Resistance*NTC1.I;
-//    NTC1.Temperature_K = (NTC_BETA*(273.15+T0))/(NTC_BETA+((273.15+T0)*log(NTC1.Resistance/R0)));
-//    NTC1.Temperature_C = NTC1.Temperature_K - 273.15;
+
     NTC1.ADC_Raw = ADCi.read(SINGLE_7);
-    NTC1.ADC_Value = 0.995*NTC1.ADC_Value + 0.005*NTC1.ADC_Raw;
+    NTC1.ADC_Value = Comfilter*NTC1.ADC_Value + (1-Comfilter)*NTC1.ADC_Raw;
     NTC1.Resistance =((float)(NTC1.ADC_Value)*_ADC_MAX*10000)/(_ADC_MAX*(_ADC_MAX-(float)NTC1.ADC_Value));
-    NTC1.Temperature_C = (_NTC_BETA*(273.15+_T0))/(_NTC_BETA+((273.15+_T0)*log(NTC1.Resistance/_R0)))-273.15;
-    
-    
+    NTC1.Temperature_C = R_To_Temperature(NTC1.Resistance);
     vTaskDelay(1 / portTICK_PERIOD_MS); /*Delay 1000ms*/
+//    
+//    NTC2.ADC_Raw = ADCi.read(SINGLE_6);
+//    NTC2.ADC_Value = Comfilter*NTC2.ADC_Value + (1-Comfilter)*NTC2.ADC_Raw;
+//    NTC2.Resistance =((float)(NTC2.ADC_Value)*_ADC_MAX*10000)/(_ADC_MAX*(_ADC_MAX-(float)NTC2.ADC_Value));
+//    NTC2.Temperature_C = R_To_Temperature(NTC2.Resistance);
+//    vTaskDelay(1 / portTICK_PERIOD_MS); /*Delay 1000ms*/
+//    
+//    NTC3.ADC_Raw = ADCi.read(SINGLE_5);
+//    NTC3.ADC_Value = Comfilter*NTC3.ADC_Value + (1-Comfilter)*NTC3.ADC_Raw;
+//    NTC3.Resistance =((float)(NTC3.ADC_Value)*_ADC_MAX*10000)/(_ADC_MAX*(_ADC_MAX-(float)NTC3.ADC_Value));
+//    NTC3.Temperature_C = R_To_Temperature(NTC3.Resistance);
+//    vTaskDelay(1 / portTICK_PERIOD_MS); /*Delay 1000ms*/
+    
+//    NTC4.ADC_Raw = ADCi.read(SINGLE_4);
+//    NTC4.ADC_Value = Comfilter*NTC4.ADC_Value + (1-Comfilter)*NTC4.ADC_Raw;
+//    NTC4.Resistance =((float)(NTC4.ADC_Value)*_ADC_MAX*10000)/(_ADC_MAX*(_ADC_MAX-(float)NTC4.ADC_Value));
+//    NTC4.Temperature_C = R_To_Temperature(NTC4.Resistance);
+//    vTaskDelay(1 / portTICK_PERIOD_MS); /*Delay 1000ms*/
   }
 }
 void setup() {
   // put your setup code here, to run once:
   UART_Debug.begin(115200);
-//  pinMode(SA0_Pin,OUTPUT);
-//  pinMode(SA1_Pin,OUTPUT);
-//  pinMode(SA2_Pin,OUTPUT);
-//  digitalWrite(SA0_Pin, LOW);
-//  digitalWrite(SA1_Pin, LOW);
-//  digitalWrite(SA2_Pin, LOW);
-//  Switch_ADC_Pin(VREF_Pin);
-//  Switch_ADC_Pin(PWR_Pin);
   delay(500);
+  
   ADCi.begin();
   UART_Debug.println("Hello World");
   UART_Debug.printf("Setup is running on CPU %d\n", xPortGetCoreID());
@@ -101,8 +112,8 @@ void loop() {
   
 //  UART_Debug.printf("ADC  = %d %d\n",NTC1.ADC_Raw,(int)NTC1.ADC_Value);
 //  UART_Debug.printf("Resistance = %f\n",NTC1.Resistance);
-  UART_Debug.printf("R T = %f %f\n",NTC1.Resistance,NTC1.Temperature_C);
-  vTaskDelay(1000 / portTICK_PERIOD_MS); /*Delay 1000ms*/
+  UART_Debug.printf("R T = %f   %f   %f   %f\n", NTC1.Temperature_C, NTC2.Temperature_C, NTC3.Temperature_C, NTC4.Temperature_C);
+  vTaskDelay(100 / portTICK_PERIOD_MS); /*Delay 1000ms*/
 }
 
 int getMostPopularElement(int arr[], const int n)
@@ -195,4 +206,41 @@ int Read_ADC_MultiSampling(int Pin)
 float map_value(float x, float in_min, float in_max, float out_min, float out_max)
 {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+float R_To_Temperature(float Resistance)
+{
+  float Tb,Rb,Beta;
+  float retVal;
+  if(Resistance <= _R150) /*150 300*/
+  {
+    Tb = 150;
+    Rb = _R150;
+    Beta = BETA150_300;
+  }
+  else if(Resistance <= _R100) /*100 150*/
+  {
+    Tb = 100;
+    Rb = _R100;
+    Beta = BETA100_150;
+  }
+  else if(Resistance <= _R50) /*50 100*/
+  {
+    Tb = 50;
+    Rb = _R50;
+    Beta = BETA50_100;
+  }
+  else if(Resistance <= _R25) /*25 50*/
+  {
+    Tb = 25;
+    Rb = _R25;
+    Beta = BETA25_50;
+  }
+  else if(Resistance > _R25) /*25 50*/
+  {
+    Tb = 25;
+    Rb = _R25;
+    Beta = BETA25_50;
+  }
+  retVal = (Beta*(273.15 + Tb))/(Beta+((273.15+ Tb)*log(NTC1.Resistance/Rb)))-273.15;
+  return retVal;
 }
