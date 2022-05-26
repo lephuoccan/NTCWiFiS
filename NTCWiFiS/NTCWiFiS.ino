@@ -147,7 +147,8 @@ void loop() {
   if(millis() - tick_espnow >= 1000)
   {
     memset(outcomData,0,outcomData_maxlen);
-    sprintf((char*)outcomData,"NTCPS:%.2f %.2f %.2f %.2f",NTC1.Temperature_C,NTC2.Temperature_C,NTC3.Temperature_C,NTC4.Temperature_C);
+    sprintf((char*)outcomData,"04NTCPS: %08.2f %08.2f %08.2f %08.2f %08.4f %08.4f %08.2f\r\n",NTC1.Temperature_C,NTC2.Temperature_C
+                ,NTC3.Temperature_C,NTC4.Temperature_C,PS1.Current,PS2.Current,TC_K_Temperature);
     UART_Debug.println((char*)outcomData);
     esp_err_t result = esp_now_send(Master_MAC, (uint8_t *) &outcomData[0], strlen((char*)outcomData));
     if (result != ESP_OK)
