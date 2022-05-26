@@ -26,10 +26,23 @@
 #define SA2_Pin   22  /* OUTPUT */
 
 #define UART_Debug  Serial
+#define NTC_SR_OC       /*NTC open circuit*/
+#define NTC_SR_DRDY      /*NTC Data ready*/
 typedef struct
 {
-  int ADC_Raw;
-  float ADC_Value;
-  float Resistance;
-  float Temperature_C;
+  int ADC_Raw;          /*ADC raw value*/
+  float ADC_Value;      /*ADC Value after 50Hz notch filter*/
+  float Resistance;     /*Resistance (Ohm unit)*/
+  float Temperature_C;  /*Temperature value in C*/
+  uint8_t SR;           /*Status register*/
 } NTC_Typedef;
+typedef struct
+{
+  int ADC_Raw;          /*ADC raw value*/
+  float ADC_Value;      /*ADC Value after 50Hz notch filter*/
+  float Resistance;
+  float Voltage;        /*Voltage (mV)*/
+  float Current;        /*Current (mA)*/
+  float Pressure;       /*Pressure in Bar*/
+  uint8_t SR;           /*Status register*/
+} PS_Typedef;

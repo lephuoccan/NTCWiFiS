@@ -80,8 +80,6 @@ uint16_t iMCP3208::read(iMCP3208_CH ch)
   uint8_t rByte1, rbyte2;
   pByte1 = (ch>>2)|0x04;
   pByte2 = ch<<6;
-//  pByte1 = 0x07;
-//  pByte2 = 0x80;
   digitalWrite(_cs, LOW);
   spiWriteByte(pByte1);
   rByte1 = spiByteTransfer(pByte2);
