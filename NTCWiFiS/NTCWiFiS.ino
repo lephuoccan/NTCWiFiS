@@ -1,14 +1,19 @@
 extern "C"{
   #include "circular_buffer.h"
 }
+
 #include "BoardCFG.h"
 #include "MCP3208.h"
+#include "Crc16.h"
+
 #include <WiFi.h>
 #include <driver/adc.h>
 #include <esp_WiFi.h>
 #include <esp_now.h>
 
 #define NSS 26
+
+/*ADC Variables*/
 static const int spiClk = 1000000;   /*SPI clock 1 MHz*/
 iMCP3208 ADCi(14,12,13,NSS,spiClk);
 const float _Vref = 3300;            /*Vref mV*/
@@ -38,7 +43,10 @@ PS_Typedef PS2;
 float TC_K_Temperature;
 uint32_t smps,c_smps;
 uint32_t micro;
-/*ADC Variables*/
+/********************************************************************************/
+/*CRC Variables*/
+ifacCRC CRC;
+uint16_t CRC16_Val;
 /********************************************************************************/
 /*ESP NOW Variables*/
 esp_now_peer_info_t peerInfo;
@@ -147,8 +155,11 @@ void loop() {
   if(millis() - tick_espnow >= 1000)
   {
     memset(outcomData,0,outcomData_maxlen);
-    sprintf((char*)outcomData,"04NTCPS: %08.2f %08.2f %08.2f %08.2f %08.4f %08.4f %08.2f\r\n",NTC1.Temperature_C,NTC2.Temperature_C
+    sprintf((char*)outcomData,"04NTCPS: %08.2f %08.2f %08.2f %08.2f %08.4f %08.4f %08.2f ",NTC1.Temperature_C,NTC2.Temperature_C
                 ,NTC3.Temperature_C,NTC4.Temperature_C,PS1.Current,PS2.Current,TC_K_Temperature);
+    uint16_t len_tmp = strlen((char*)outcomData);      
+    CRC16_Val = CRC.CRC16_Modbus(outcomData,len_tmp);
+    sprintf((char*)&outcomData[len_tmp],"%05d\r\n",CRC16_Val);
     UART_Debug.println((char*)outcomData);
     esp_err_t result = esp_now_send(Master_MAC, (uint8_t *) &outcomData[0], strlen((char*)outcomData));
     if (result != ESP_OK)
@@ -239,5 +250,4 @@ void data_receive(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&incomData[0],incomingData,len);
 //  ESPNOW_Data_len = len;
 //  ESPNOW_Data_Received = 1;
-
 }
