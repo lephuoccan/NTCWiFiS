@@ -57,6 +57,16 @@ uint8_t outcomData[outcomData_maxlen];
 uint8_t incomData[250];
 uint8_t ESPNOW_Data_Received;
 /********************************************************************************/
+/*UART Variables*/
+CIRC_BUFF_INIT(Uart_Circ_Buff1, 2047);
+uint8_t uart_rx1;
+uint8_t Uart_Receive_Cmd_Buff1[255],Uart_Receive_Cmd_Buff_Index1;
+uint8_t Uart_buff_cmd_status1;
+uint8_t Uart_rx1,Uart_Start_Frame_Flag1;
+uint8_t lucaEndByte1[2] = {'\r','\n'};
+uint8_t lucCountEndByte1 = 0;
+uint8_t Luc_Ret1;
+/********************************************************************************/
 void InitESPNow();
 float map_value(float x, float in_min, float in_max, float out_min, float out_max);
 
@@ -118,6 +128,7 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 void setup() {
   // put your setup code here, to run once:
   UART_Debug.begin(115200);
+  UART1.begin(115200, SERIAL_8N1,33,32);
   delay(1000);
   UART_Debug.println("Initialize UART_debug: UART0 115200 8N1");
   UART_Debug.println(WiFi.macAddress());
@@ -141,6 +152,15 @@ void setup() {
   xTaskCreatePinnedToCore(
     ADC_Process,
     "ADC_Process",  // Task name
+    5000,             // Stack size (bytes)
+    NULL,             // Parameter
+    1,                // Task priority
+    NULL,             // Task handle
+    1    // CPU ID
+  );
+  xTaskCreatePinnedToCore(
+    Serial_Process,
+    "Serial_Process",  // Task name
     5000,             // Stack size (bytes)
     NULL,             // Parameter
     1,                // Task priority
@@ -250,4 +270,110 @@ void data_receive(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&incomData[0],incomingData,len);
 //  ESPNOW_Data_len = len;
 //  ESPNOW_Data_Received = 1;
+}
+void Process_Data_Serial1(void)
+{
+  if (strstr((char*)Uart_Receive_Cmd_Buff1,"R FF 00000000") != NULL)
+  {
+    
+  }
+}
+void Serial_Process(void * parameter)
+{
+     // ARTISAN_WS_Serial.print("//Serial_Process running on core ");
+     // ARTISAN_WS_Serial.println(xPortGetCoreID());
+  for(;;)
+  {
+    /*****************Receive uart and push to circular buffer******************/
+    if(UART1.available())
+    {
+      uart_rx1 = UART1.read();
+      Circ_Buff_Push(&Uart_Circ_Buff1, uart_rx1);
+    }
+    /***************************************************************************/
+    /*******************Process data form circular buffer***********************/
+    Luc_Ret1 = 0;
+    Uart_buff_cmd_status1 = Circ_Buff_Pop(&Uart_Circ_Buff1,&Uart_rx1);
+    while(Uart_buff_cmd_status1 != CIRC_BUFF_EMPTY)
+    {
+      /* Check start byte */
+      if(Uart_rx1 == '>')
+      {
+        memset(Uart_Receive_Cmd_Buff1, '\0', 255);
+        Uart_Start_Frame_Flag1 = 1;
+        Uart_Receive_Cmd_Buff_Index1 = 0;
+      }
+      else
+      {
+        /* No action */
+      }
+      /* Get valid byte cmd and check frame */
+      if((Uart_Start_Frame_Flag1 == 1) && (Uart_rx1 != '>'))
+      {
+        /* Check end byte and flush */
+        if(Uart_rx1 == lucaEndByte1[lucCountEndByte1])
+        {
+          lucCountEndByte1++;
+        }
+        /* Check 2 byte lien tiep */
+        else if(lucCountEndByte1 == 1)
+        {
+          /* Reset counter end byte */
+          lucCountEndByte1 = 0;
+        }
+        else
+        {
+  
+        }
+  
+        /* Get valid byte cmd into buff */
+        Uart_Receive_Cmd_Buff1[Uart_Receive_Cmd_Buff_Index1] = Uart_rx1;
+        Uart_Receive_Cmd_Buff_Index1++;
+  
+        /* Check out of range of buffer */
+        if(Uart_Receive_Cmd_Buff_Index1 >= 255)
+        {
+          Uart_Receive_Cmd_Buff_Index1 = 0;
+          Uart_Start_Frame_Flag1 = 0;
+          Luc_Ret1 = 0;
+        }
+  
+        /* Check enough 2 byte end and stop frame data */
+        if(lucCountEndByte1 == 2)
+        {
+          /* Clear 2 end byte of frame received data */
+          memset(Uart_Receive_Cmd_Buff1 + Uart_Receive_Cmd_Buff_Index1 - lucCountEndByte1, '\0', lucCountEndByte1);
+  
+          Uart_Start_Frame_Flag1 = 0;
+          Uart_Receive_Cmd_Buff_Index1 = 0;
+          Luc_Ret1 = 1;
+  
+          /* Break out loop */
+          Uart_buff_cmd_status1 = CIRC_BUFF_EMPTY;
+  
+          /* Reset counter end byte */
+          lucCountEndByte1 = 0;
+        }
+        else
+        {
+          /* No action */
+        }
+      }
+      else
+      {
+        /* No action */
+      }
+  
+      /* Check empty condition break-out loop above */
+      if(Uart_buff_cmd_status1 != CIRC_BUFF_EMPTY)
+      {
+        Uart_buff_cmd_status1 = Circ_Buff_Pop(&Uart_Circ_Buff1, &Uart_rx1);
+      }
+    }
+    if(Luc_Ret1 == 1)
+    {
+      /*Received buffer cmd successfully*/
+      Process_Data_Serial1();
+    }
+  }
 }

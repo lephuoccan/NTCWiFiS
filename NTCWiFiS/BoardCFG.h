@@ -26,6 +26,8 @@
 #define SA2_Pin   22  /* OUTPUT */
 
 #define UART_Debug  Serial
+#define UART1       Serial1
+
 #define NTC_SR_OC       /*NTC open circuit*/
 #define NTC_SR_DRDY      /*NTC Data ready*/
 typedef struct
