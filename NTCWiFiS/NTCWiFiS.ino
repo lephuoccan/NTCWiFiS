@@ -10,8 +10,10 @@ extern "C"{
 #include <driver/adc.h>
 #include <esp_WiFi.h>
 #include <esp_now.h>
+#include <EEPROM.h>
 
 #define NSS 26
+#define FLASH_MEMORY_SIZE 512
 
 /*ADC Variables*/
 static const int spiClk = 1000000;   /*SPI clock 1 MHz*/
@@ -52,10 +54,14 @@ uint16_t CRC16_Val;
 esp_now_peer_info_t peerInfo;
 uint8_t Broadcast_MAC[]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 uint8_t Master_MAC[]={0x24,0x62,0xAB,0xE4,0x06,0x20};
+uint8_t MAC_Dest[]={0x24,0x00,0x00,0x00,0x00,0x00};
+
 const uint8_t outcomData_maxlen=250;
 uint8_t outcomData[outcomData_maxlen];
 uint8_t incomData[250];
 uint8_t ESPNOW_Data_Received;
+uint8_t ESPNOW_Data_len;
+uint8_t MACS_Received = 0;
 /********************************************************************************/
 /*UART Variables*/
 CIRC_BUFF_INIT(Uart_Circ_Buff1, 2047);
@@ -67,7 +73,8 @@ uint8_t lucaEndByte1[2] = {'\r','\n'};
 uint8_t lucCountEndByte1 = 0;
 uint8_t Luc_Ret1;
 /********************************************************************************/
-void InitESPNow();
+void InitESPNow(void);
+void ADC_InitValue(void);
 float map_value(float x, float in_min, float in_max, float out_min, float out_max);
 
 void ADC_Process(void * parameter)
@@ -125,6 +132,25 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 //  Serial.print("Last Packet Sent to: "); Serial.println(macStr);
 //  Serial.print("Last Packet Send Status: "); Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
 }
+void data_receive(const uint8_t * mac, const uint8_t *incomingData, int len) 
+{
+    memset(&incomData[0],0,250);
+    memcpy(&incomData[0],incomingData,len);
+    ESPNOW_Data_len = len;
+    ESPNOW_Data_Received = 1;
+    if(incomData[0]=='M' && incomData[1]=='A' && incomData[2]=='C'&& incomData[3]=='D'&& incomData[4]==':')
+    {
+      memcpy(MAC_Dest,&incomData[5],6);
+      EEPROM.write(0,MAC_Dest[0]);
+      EEPROM.write(1,MAC_Dest[1]);
+      EEPROM.write(2,MAC_Dest[2]);
+      EEPROM.write(3,MAC_Dest[3]);
+      EEPROM.write(4,MAC_Dest[4]);
+      EEPROM.write(5,MAC_Dest[5]);
+      EEPROM.commit();
+      MACS_Received = 1;
+    }
+}
 void setup() {
   // put your setup code here, to run once:
   UART_Debug.begin(115200);
@@ -134,6 +160,15 @@ void setup() {
   UART_Debug.println(WiFi.macAddress());
   UART_Debug.printf("Setup is running on CPU %d\n", xPortGetCoreID());
   
+  EEPROM.begin(FLASH_MEMORY_SIZE);
+  MAC_Dest[0] = EEPROM.readByte(0);
+  MAC_Dest[1] = EEPROM.readByte(1);
+  MAC_Dest[2] = EEPROM.readByte(2);
+  MAC_Dest[3] = EEPROM.readByte(3);
+  MAC_Dest[4] = EEPROM.readByte(4);
+  MAC_Dest[5] = EEPROM.readByte(5);
+
+  
   ADCi.begin();
   esp_wifi_set_ps(WIFI_PS_NONE);    /* No power save */
   PS1.Resistance = 150.0;
@@ -141,14 +176,15 @@ void setup() {
   
   InitESPNow();
   esp_now_register_send_cb(OnDataSent);
-  memcpy(peerInfo.peer_addr, Master_MAC, 6);
+  esp_now_register_recv_cb(data_receive);
+  memcpy(peerInfo.peer_addr, MAC_Dest, 6);
   peerInfo.channel = 1;  
   peerInfo.encrypt = false;     
   if (esp_now_add_peer(&peerInfo) != ESP_OK){
     UART_Debug.println("Failed to add peer");
     return;
   }
-  
+  ADC_InitValue();
   xTaskCreatePinnedToCore(
     ADC_Process,
     "ADC_Process",  // Task name
@@ -181,7 +217,7 @@ void loop() {
     CRC16_Val = CRC.CRC16_Modbus(outcomData,len_tmp);
     sprintf((char*)&outcomData[len_tmp],"%05d\r\n",CRC16_Val);
     UART_Debug.println((char*)outcomData);
-    esp_err_t result = esp_now_send(Master_MAC, (uint8_t *) &outcomData[0], strlen((char*)outcomData));
+    esp_err_t result = esp_now_send(MAC_Dest, (uint8_t *) &outcomData[0], strlen((char*)outcomData));
     if (result != ESP_OK)
     {
       UART_Debug.print("Send Status: ");
@@ -249,7 +285,8 @@ float R_To_Temperature(float Resistance)
   retVal = (Beta*(273.15 + Tb))/(Beta+((273.15+ Tb)*log(Resistance/Rb)))-273.15;
   return retVal;
 }
-void InitESPNow() {
+void InitESPNow(void) 
+{
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   if (esp_now_init() == ESP_OK) {
@@ -265,12 +302,6 @@ void InitESPNow() {
   esp_wifi_set_channel(1,WIFI_SECOND_CHAN_NONE);
 }
 
-void data_receive(const uint8_t * mac, const uint8_t *incomingData, int len) {
-  memset(&incomData[0],0,250);
-  memcpy(&incomData[0],incomingData,len);
-//  ESPNOW_Data_len = len;
-//  ESPNOW_Data_Received = 1;
-}
 void Process_Data_Serial1(void)
 {
   if (strstr((char*)Uart_Receive_Cmd_Buff1,"R FF 00000000") != NULL)
@@ -376,4 +407,38 @@ void Serial_Process(void * parameter)
       Process_Data_Serial1();
     }
   }
+}
+void ADC_InitValue(void)
+{
+    NTC1.ADC_Raw = ADCi.read(SINGLE_7);
+    NTC1.ADC_Value = NTC1.ADC_Raw;
+    NTC1.Resistance =((float)(NTC1.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC1.ADC_Value));
+    NTC1.Temperature_C = R_To_Temperature(NTC1.Resistance);
+
+    NTC2.ADC_Raw = ADCi.read(SINGLE_6);
+    NTC2.ADC_Value = NTC2.ADC_Raw;
+    NTC2.Resistance =((float)(NTC2.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC2.ADC_Value));
+    NTC2.Temperature_C = R_To_Temperature(NTC2.Resistance);
+
+    NTC3.ADC_Raw = ADCi.read(SINGLE_5);
+    NTC3.ADC_Value = NTC3.ADC_Raw;
+    NTC3.Resistance =((float)(NTC3.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC3.ADC_Value));
+    NTC3.Temperature_C = R_To_Temperature(NTC3.Resistance);
+
+    NTC4.ADC_Raw = ADCi.read(SINGLE_4);
+    NTC4.ADC_Value = NTC4.ADC_Raw;
+    NTC4.Resistance =((float)(NTC4.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC4.ADC_Value));
+    NTC4.Temperature_C = R_To_Temperature(NTC4.Resistance);
+
+    PS1.ADC_Raw = ADCi.read(SINGLE_0);
+    PS1.ADC_Value = PS1.ADC_Raw;
+    PS1.Voltage = PS1.ADC_Value*_Vref/_ADC_MAX;
+    PS1.Current = PS1.Voltage / PS1.Resistance;
+    
+    PS2.ADC_Raw = ADCi.read(SINGLE_1);
+    PS2.ADC_Value = PS2.ADC_Raw;
+    PS2.Voltage = PS2.ADC_Value*_Vref/_ADC_MAX;
+    PS2.Current = PS2.Voltage / PS2.Resistance;
+
+    TC_K_Temperature = map_value(PS1.Current,4.0,20.0,0,800);
 }
