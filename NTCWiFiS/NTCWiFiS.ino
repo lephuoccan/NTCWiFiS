@@ -231,26 +231,26 @@ void loop() {
     uint16_t len_tmp = strlen((char*)outcomData);      
     CRC16_Val = CRC.CRC16_Modbus(outcomData,len_tmp);
     sprintf((char*)&outcomData[len_tmp],"%05d\r\n",CRC16_Val);
-//    UART_Debug.println((char*)outcomData);
-//    esp_err_t result = esp_now_send(MAC_Dest, (uint8_t *) &outcomData[0], strlen((char*)outcomData));
-//    if (result != ESP_OK)
-//    {
-//      UART_Debug.print("Send Status: ");
-//      if (result == ESP_ERR_ESPNOW_NOT_INIT) {
-//        // How did we get so far!!
-//        UART_Debug.println("ESPNOW not Init.");
-//      } else if (result == ESP_ERR_ESPNOW_ARG) {
-//        UART_Debug.println("Invalid Argument");
-//      } else if (result == ESP_ERR_ESPNOW_INTERNAL) {
-//        UART_Debug.println("Internal Error");
-//      } else if (result == ESP_ERR_ESPNOW_NO_MEM) {
-//        UART_Debug.println("ESP_ERR_ESPNOW_NO_MEM");
-//      } else if (result == ESP_ERR_ESPNOW_NOT_FOUND) {
-//        UART_Debug.println("Peer not found.");
-//      } else {
-//        UART_Debug.println("Not sure what happened");
-//      }
-//    }
+    UART_Debug.println((char*)outcomData);
+    esp_err_t result = esp_now_send(MAC_Dest, (uint8_t *) &outcomData[0], strlen((char*)outcomData));
+    if (result != ESP_OK)
+    {
+      UART_Debug.print("Send Status: ");
+      if (result == ESP_ERR_ESPNOW_NOT_INIT) {
+        // How did we get so far!!
+        UART_Debug.println("ESPNOW not Init.");
+      } else if (result == ESP_ERR_ESPNOW_ARG) {
+        UART_Debug.println("Invalid Argument");
+      } else if (result == ESP_ERR_ESPNOW_INTERNAL) {
+        UART_Debug.println("Internal Error");
+      } else if (result == ESP_ERR_ESPNOW_NO_MEM) {
+        UART_Debug.println("ESP_ERR_ESPNOW_NO_MEM");
+      } else if (result == ESP_ERR_ESPNOW_NOT_FOUND) {
+        UART_Debug.println("Peer not found.");
+      } else {
+        UART_Debug.println("Not sure what happened");
+      }
+    }
     tick_espnow = millis();
   }
 //  UART_Debug.printf("ADC  = %d %d\n",NTC1.ADC_Raw,(int)NTC1.ADC_Value);
