@@ -49,6 +49,7 @@ uint32_t micro;
 /*CRC Variables*/
 ifacCRC CRC;
 uint16_t CRC16_Val;
+uint16_t CRC16_Val_CCIT;
 /********************************************************************************/
 /*ESP NOW Variables*/
 esp_now_peer_info_t peerInfo;
@@ -72,6 +73,7 @@ uint8_t Uart_rx1,Uart_Start_Frame_Flag1;
 uint8_t lucaEndByte1[2] = {'\r','\n'};
 uint8_t lucCountEndByte1 = 0;
 uint8_t Luc_Ret1;
+char outcomData_uart1[100];
 /********************************************************************************/
 void InitESPNow(void);
 void ADC_InitValue(void);
@@ -157,6 +159,7 @@ void setup() {
   UART1.begin(115200, SERIAL_8N1,33,32);
   delay(1000);
   UART_Debug.println("Initialize UART_debug: UART0 115200 8N1");
+  UART1.println("Initialize UART1: UART1 115200 8N1");
   UART_Debug.println(WiFi.macAddress());
   UART_Debug.printf("Setup is running on CPU %d\n", xPortGetCoreID());
   
@@ -229,25 +232,25 @@ void loop() {
     CRC16_Val = CRC.CRC16_Modbus(outcomData,len_tmp);
     sprintf((char*)&outcomData[len_tmp],"%05d\r\n",CRC16_Val);
 //    UART_Debug.println((char*)outcomData);
-    esp_err_t result = esp_now_send(MAC_Dest, (uint8_t *) &outcomData[0], strlen((char*)outcomData));
-    if (result != ESP_OK)
-    {
-      UART_Debug.print("Send Status: ");
-      if (result == ESP_ERR_ESPNOW_NOT_INIT) {
-        // How did we get so far!!
-        UART_Debug.println("ESPNOW not Init.");
-      } else if (result == ESP_ERR_ESPNOW_ARG) {
-        UART_Debug.println("Invalid Argument");
-      } else if (result == ESP_ERR_ESPNOW_INTERNAL) {
-        UART_Debug.println("Internal Error");
-      } else if (result == ESP_ERR_ESPNOW_NO_MEM) {
-        UART_Debug.println("ESP_ERR_ESPNOW_NO_MEM");
-      } else if (result == ESP_ERR_ESPNOW_NOT_FOUND) {
-        UART_Debug.println("Peer not found.");
-      } else {
-        UART_Debug.println("Not sure what happened");
-      }
-    }
+//    esp_err_t result = esp_now_send(MAC_Dest, (uint8_t *) &outcomData[0], strlen((char*)outcomData));
+//    if (result != ESP_OK)
+//    {
+//      UART_Debug.print("Send Status: ");
+//      if (result == ESP_ERR_ESPNOW_NOT_INIT) {
+//        // How did we get so far!!
+//        UART_Debug.println("ESPNOW not Init.");
+//      } else if (result == ESP_ERR_ESPNOW_ARG) {
+//        UART_Debug.println("Invalid Argument");
+//      } else if (result == ESP_ERR_ESPNOW_INTERNAL) {
+//        UART_Debug.println("Internal Error");
+//      } else if (result == ESP_ERR_ESPNOW_NO_MEM) {
+//        UART_Debug.println("ESP_ERR_ESPNOW_NO_MEM");
+//      } else if (result == ESP_ERR_ESPNOW_NOT_FOUND) {
+//        UART_Debug.println("Peer not found.");
+//      } else {
+//        UART_Debug.println("Not sure what happened");
+//      }
+//    }
     tick_espnow = millis();
   }
 //  UART_Debug.printf("ADC  = %d %d\n",NTC1.ADC_Raw,(int)NTC1.ADC_Value);
@@ -318,7 +321,39 @@ void Process_Data_Serial1(void)
 {
   if (strstr((char*)Uart_Receive_Cmd_Buff1,"R FF 00000000") != NULL)
   {
-    
+    UART1.printf("> R FF 00000000");
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R T1 00000000") != NULL)
+  {
+    memset(outcomData_uart1,0,100);
+    sprintf(outcomData_uart1,"> R T1 %08.3f ",NTC1.Temperature_C);
+    CRC16_Val_CCIT = CRC.CRC16_CCIT((uint8_t*)outcomData_uart1,16);
+    sprintf(&outcomData_uart1[16],"%05d\r\n",CRC16_Val_CCIT);
+    UART1.print(outcomData_uart1);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R T2 00000000") != NULL)
+  {
+    memset(outcomData_uart1,0,100);
+    sprintf(outcomData_uart1,"> R T2 %08.3f ",NTC2.Temperature_C);
+    CRC16_Val_CCIT = CRC.CRC16_CCIT((uint8_t*)outcomData_uart1,16);
+    sprintf(&outcomData_uart1[16],"%05d\r\n",CRC16_Val_CCIT);
+    UART1.print(outcomData_uart1);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R T3 00000000") != NULL)
+  {
+    memset(outcomData_uart1,0,100);
+    sprintf(outcomData_uart1,"> R T3 %08.3f ",TC_K_Temperature);
+    CRC16_Val_CCIT = CRC.CRC16_CCIT((uint8_t*)outcomData_uart1,16);
+    sprintf(&outcomData_uart1[16],"%05d\r\n",CRC16_Val_CCIT);
+    UART1.print(outcomData_uart1);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R T4 00000000") != NULL)
+  {
+    memset(outcomData_uart1,0,100);
+    sprintf(outcomData_uart1,"> R T4 %08.3f ",NTC4.Temperature_C);
+    CRC16_Val_CCIT = CRC.CRC16_CCIT((uint8_t*)outcomData_uart1,16);
+    sprintf(&outcomData_uart1[16],"%05d\r\n",CRC16_Val_CCIT);
+    UART1.print(outcomData_uart1);
   }
 }
 void Serial_Process(void * parameter)
@@ -382,7 +417,7 @@ void Serial_Process(void * parameter)
         }
   
         /* Check enough 2 byte end and stop frame data */
-        if(lucCountEndByte1 == 2)
+        if(lucCountEndByte1 == 2 || Uart_rx1 == 0x0A)
         {
           /* Clear 2 end byte of frame received data */
           memset(Uart_Receive_Cmd_Buff1 + Uart_Receive_Cmd_Buff_Index1 - lucCountEndByte1, '\0', lucCountEndByte1);
