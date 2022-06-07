@@ -138,7 +138,7 @@ void data_receive(const uint8_t * mac, const uint8_t *incomingData, int len)
     memcpy(&incomData[0],incomingData,len);
     ESPNOW_Data_len = len;
     ESPNOW_Data_Received = 1;
-    if(incomData[0]=='M' && incomData[1]=='A' && incomData[2]=='C'&& incomData[3]=='D'&& incomData[4]==':')
+    if(incomData[0]=='M' && incomData[1]=='A' && incomData[2]=='C'&& incomData[3]=='S'&& incomData[4]==':')
     {
       memcpy(MAC_Dest,&incomData[5],6);
       EEPROM.write(0,MAC_Dest[0]);
@@ -167,7 +167,19 @@ void setup() {
   MAC_Dest[3] = EEPROM.readByte(3);
   MAC_Dest[4] = EEPROM.readByte(4);
   MAC_Dest[5] = EEPROM.readByte(5);
-
+  
+  UART_Debug.print("MACDest: ");
+  UART_Debug.print(MAC_Dest[5],HEX);
+  UART_Debug.print(":");
+  UART_Debug.print(MAC_Dest[4],HEX);
+  UART_Debug.print(":");
+  UART_Debug.print(MAC_Dest[3],HEX);
+  UART_Debug.print(":");
+  UART_Debug.print(MAC_Dest[2],HEX);
+  UART_Debug.print(":");
+  UART_Debug.print(MAC_Dest[1],HEX);
+  UART_Debug.print(":");
+  UART_Debug.println(MAC_Dest[0],HEX);
   
   ADCi.begin();
   esp_wifi_set_ps(WIFI_PS_NONE);    /* No power save */
@@ -216,7 +228,7 @@ void loop() {
     uint16_t len_tmp = strlen((char*)outcomData);      
     CRC16_Val = CRC.CRC16_Modbus(outcomData,len_tmp);
     sprintf((char*)&outcomData[len_tmp],"%05d\r\n",CRC16_Val);
-    UART_Debug.println((char*)outcomData);
+//    UART_Debug.println((char*)outcomData);
     esp_err_t result = esp_now_send(MAC_Dest, (uint8_t *) &outcomData[0], strlen((char*)outcomData));
     if (result != ESP_OK)
     {
@@ -239,7 +251,7 @@ void loop() {
     tick_espnow = millis();
   }
 //  UART_Debug.printf("ADC  = %d %d\n",NTC1.ADC_Raw,(int)NTC1.ADC_Value);
-  UART_Debug.printf("T = %f   %f   %f   %f    %f\n", NTC1.Temperature_C, NTC2.Temperature_C, NTC3.Temperature_C, NTC4.Temperature_C, TC_K_Temperature);
+//  UART_Debug.printf("T = %f   %f   %f   %f    %f\n", NTC1.Temperature_C, NTC2.Temperature_C, NTC3.Temperature_C, NTC4.Temperature_C, TC_K_Temperature);
 //  UART_Debug.printf("ADC  = %f %f   %f %f\n",PS1.Voltage,PS1.Current,PS2.Voltage,PS2.Current );
   vTaskDelay(100 / portTICK_PERIOD_MS); /*Delay 1000ms*/
 }
