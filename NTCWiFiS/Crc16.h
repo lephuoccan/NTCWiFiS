@@ -25,10 +25,7 @@ class ifacCRC
 {
   public:
     uint16_t CRC16_Modbus(uint8_t *uc_pBuffer, uint16_t ul_Length);
-    
-  private:
-    uint16_t crc16_str(char *ptr, uint8_t len);
-    uint16_t crc16_byte(uint16_t crcValue, uint8_t newByte);
+    uint16_t CRC16_CCIT(uint8_t *uc_pBuffer, uint16_t ul_Length);
 };
 
 

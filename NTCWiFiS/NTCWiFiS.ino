@@ -20,18 +20,6 @@ static const int spiClk = 1000000;   /*SPI clock 1 MHz*/
 iMCP3208 ADCi(14,12,13,NSS,spiClk);
 const float _Vref = 3300;            /*Vref mV*/
 const float _ADC_MAX = 4095;         /* ADC 12bit */
-const float _R1 = 10000.0;
-const float _R25 = 100000.0;
-const float _R50 = 35899.9;
-const float _R100 = 6710.0;
-const float _R150 = 1770.0;
-const float _R300 = 105.6;
-
-const float BETA25_50 = 3948.06;
-const float BETA50_100 = 4044.69;
-const float BETA100_150 = 4208.37;
-const float BETA150_300 = 4504.0;
-
 const float Comfilter = 0.999;
 
 NTC_Typedef NTC1;
@@ -49,6 +37,7 @@ uint32_t micro;
 /*CRC Variables*/
 ifacCRC CRC;
 uint16_t CRC16_Val;
+uint16_t CRC16_Val_CCIT;
 /********************************************************************************/
 /*ESP NOW Variables*/
 esp_now_peer_info_t peerInfo;
@@ -72,6 +61,9 @@ uint8_t Uart_rx1,Uart_Start_Frame_Flag1;
 uint8_t lucaEndByte1[2] = {'\r','\n'};
 uint8_t lucCountEndByte1 = 0;
 uint8_t Luc_Ret1;
+char outcomData_uart1[100];
+uint8_t Uart1_Transceiving = 0;
+uint32_t Uart1_Transceiving_tick = 0;
 /********************************************************************************/
 void InitESPNow(void);
 void ADC_InitValue(void);
@@ -85,23 +77,23 @@ void ADC_Process(void * parameter)
   {
     NTC1.ADC_Raw = ADCi.read(SINGLE_7);
     NTC1.ADC_Value = Comfilter*NTC1.ADC_Value + (1-Comfilter)*NTC1.ADC_Raw;
-    NTC1.Resistance =((float)(NTC1.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC1.ADC_Value));
-    NTC1.Temperature_C = R_To_Temperature(NTC1.Resistance);
+    NTC1.Resistance =((float)(NTC1.ADC_Value)*_ADC_MAX*NTC1.RS)/(_ADC_MAX*(_ADC_MAX-(float)NTC1.ADC_Value));
+    NTC1.Temperature_C = R_To_Temperature(NTC1.Resistance, NTC100k_3950);
 
     NTC2.ADC_Raw = ADCi.read(SINGLE_6);
     NTC2.ADC_Value = Comfilter*NTC2.ADC_Value + (1-Comfilter)*NTC2.ADC_Raw;
-    NTC2.Resistance =((float)(NTC2.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC2.ADC_Value));
-    NTC2.Temperature_C = R_To_Temperature(NTC2.Resistance);
+    NTC2.Resistance =((float)(NTC2.ADC_Value)*_ADC_MAX*NTC2.RS)/(_ADC_MAX*(_ADC_MAX-(float)NTC2.ADC_Value));
+    NTC2.Temperature_C = R_To_Temperature(NTC2.Resistance, NTC100k_3950);
 
     NTC3.ADC_Raw = ADCi.read(SINGLE_5);
     NTC3.ADC_Value = Comfilter*NTC3.ADC_Value + (1-Comfilter)*NTC3.ADC_Raw;
-    NTC3.Resistance =((float)(NTC3.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC3.ADC_Value));
-    NTC3.Temperature_C = R_To_Temperature(NTC3.Resistance);
+    NTC3.Resistance =((float)(NTC3.ADC_Value)*_ADC_MAX*NTC3.RS)/(_ADC_MAX*(_ADC_MAX-(float)NTC3.ADC_Value));
+    NTC3.Temperature_C = R_To_Temperature(NTC3.Resistance, NTC100k_3950);
 
     NTC4.ADC_Raw = ADCi.read(SINGLE_4);
     NTC4.ADC_Value = Comfilter*NTC4.ADC_Value + (1-Comfilter)*NTC4.ADC_Raw;
-    NTC4.Resistance =((float)(NTC4.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC4.ADC_Value));
-    NTC4.Temperature_C = R_To_Temperature(NTC4.Resistance);
+    NTC4.Resistance =((float)(NTC4.ADC_Value)*_ADC_MAX*NTC4.RS)/(_ADC_MAX*(_ADC_MAX-(float)NTC4.ADC_Value));
+    NTC4.Temperature_C = R_To_Temperature(NTC4.Resistance, NTC100k_3950);
 
     PS1.ADC_Raw = ADCi.read(SINGLE_0);
     PS1.ADC_Value = Comfilter*PS1.ADC_Value + (1-Comfilter)*PS1.ADC_Raw;
@@ -138,7 +130,7 @@ void data_receive(const uint8_t * mac, const uint8_t *incomingData, int len)
     memcpy(&incomData[0],incomingData,len);
     ESPNOW_Data_len = len;
     ESPNOW_Data_Received = 1;
-    if(incomData[0]=='M' && incomData[1]=='A' && incomData[2]=='C'&& incomData[3]=='D'&& incomData[4]==':')
+    if(incomData[0]=='M' && incomData[1]=='A' && incomData[2]=='C'&& incomData[3]=='S'&& incomData[4]==':')
     {
       memcpy(MAC_Dest,&incomData[5],6);
       EEPROM.write(0,MAC_Dest[0]);
@@ -157,6 +149,7 @@ void setup() {
   UART1.begin(115200, SERIAL_8N1,33,32);
   delay(1000);
   UART_Debug.println("Initialize UART_debug: UART0 115200 8N1");
+  UART1.println("Initialize UART1: UART1 115200 8N1");
   UART_Debug.println(WiFi.macAddress());
   UART_Debug.printf("Setup is running on CPU %d\n", xPortGetCoreID());
   
@@ -167,7 +160,19 @@ void setup() {
   MAC_Dest[3] = EEPROM.readByte(3);
   MAC_Dest[4] = EEPROM.readByte(4);
   MAC_Dest[5] = EEPROM.readByte(5);
-
+  
+  UART_Debug.print("MACDest: ");
+  UART_Debug.print(MAC_Dest[5],HEX);
+  UART_Debug.print(":");
+  UART_Debug.print(MAC_Dest[4],HEX);
+  UART_Debug.print(":");
+  UART_Debug.print(MAC_Dest[3],HEX);
+  UART_Debug.print(":");
+  UART_Debug.print(MAC_Dest[2],HEX);
+  UART_Debug.print(":");
+  UART_Debug.print(MAC_Dest[1],HEX);
+  UART_Debug.print(":");
+  UART_Debug.println(MAC_Dest[0],HEX);
   
   ADCi.begin();
   esp_wifi_set_ps(WIFI_PS_NONE);    /* No power save */
@@ -217,29 +222,38 @@ void loop() {
     CRC16_Val = CRC.CRC16_Modbus(outcomData,len_tmp);
     sprintf((char*)&outcomData[len_tmp],"%05d\r\n",CRC16_Val);
     UART_Debug.println((char*)outcomData);
-    esp_err_t result = esp_now_send(MAC_Dest, (uint8_t *) &outcomData[0], strlen((char*)outcomData));
-    if (result != ESP_OK)
+    if(Uart1_Transceiving == 0)
     {
-      UART_Debug.print("Send Status: ");
-      if (result == ESP_ERR_ESPNOW_NOT_INIT) {
-        // How did we get so far!!
-        UART_Debug.println("ESPNOW not Init.");
-      } else if (result == ESP_ERR_ESPNOW_ARG) {
-        UART_Debug.println("Invalid Argument");
-      } else if (result == ESP_ERR_ESPNOW_INTERNAL) {
-        UART_Debug.println("Internal Error");
-      } else if (result == ESP_ERR_ESPNOW_NO_MEM) {
-        UART_Debug.println("ESP_ERR_ESPNOW_NO_MEM");
-      } else if (result == ESP_ERR_ESPNOW_NOT_FOUND) {
-        UART_Debug.println("Peer not found.");
-      } else {
-        UART_Debug.println("Not sure what happened");
+      UART1.println("Send ESP now");
+      esp_err_t result = esp_now_send(MAC_Dest, (uint8_t *) &outcomData[0], strlen((char*)outcomData));
+      if (result != ESP_OK)
+      {
+        UART_Debug.print("Send Status: ");
+        if (result == ESP_ERR_ESPNOW_NOT_INIT) {
+          // How did we get so far!!
+          UART_Debug.println("ESPNOW not Init.");
+        } else if (result == ESP_ERR_ESPNOW_ARG) {
+          UART_Debug.println("Invalid Argument");
+        } else if (result == ESP_ERR_ESPNOW_INTERNAL) {
+          UART_Debug.println("Internal Error");
+        } else if (result == ESP_ERR_ESPNOW_NO_MEM) {
+          UART_Debug.println("ESP_ERR_ESPNOW_NO_MEM");
+        } else if (result == ESP_ERR_ESPNOW_NOT_FOUND) {
+          UART_Debug.println("Peer not found.");
+        } else {
+          UART_Debug.println("Not sure what happened");
+        }
       }
+    }
+    if(millis() - Uart1_Transceiving_tick >= 5000)
+    {
+      Uart1_Transceiving = 0;
+      Uart1_Transceiving_tick = millis();
     }
     tick_espnow = millis();
   }
 //  UART_Debug.printf("ADC  = %d %d\n",NTC1.ADC_Raw,(int)NTC1.ADC_Value);
-  UART_Debug.printf("T = %f   %f   %f   %f    %f\n", NTC1.Temperature_C, NTC2.Temperature_C, NTC3.Temperature_C, NTC4.Temperature_C, TC_K_Temperature);
+//  UART_Debug.printf("T = %f   %f   %f   %f    %f\n", NTC1.Temperature_C, NTC2.Temperature_C, NTC3.Temperature_C, NTC4.Temperature_C, TC_K_Temperature);
 //  UART_Debug.printf("ADC  = %f %f   %f %f\n",PS1.Voltage,PS1.Current,PS2.Voltage,PS2.Current );
   vTaskDelay(100 / portTICK_PERIOD_MS); /*Delay 1000ms*/
 }
@@ -248,39 +262,39 @@ float map_value(float x, float in_min, float in_max, float out_min, float out_ma
 {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
-float R_To_Temperature(float Resistance)
+float R_To_Temperature(float Resistance, NTCType_Typedef NTC_Type)
 {
   float Tb,Rb,Beta;
   float retVal;
-  if(Resistance <= _R150) /*150 300*/
+  if(Resistance <= NTC_Type.R150) /*150 300*/
   {
     Tb = 150;
-    Rb = _R150;
-    Beta = BETA150_300;
+    Rb = NTC_Type.R150;
+    Beta = NTC_Type.BETA150_300;
   }
-  else if(Resistance <= _R100) /*100 150*/
+  else if(Resistance <= NTC_Type.R100) /*100 150*/
   {
     Tb = 100;
-    Rb = _R100;
-    Beta = BETA100_150;
+    Rb = NTC_Type.R100;
+    Beta = NTC_Type.BETA100_150;
   }
-  else if(Resistance <= _R50) /*50 100*/
+  else if(Resistance <= NTC_Type.R50) /*50 100*/
   {
     Tb = 50;
-    Rb = _R50;
-    Beta = BETA50_100;
+    Rb = NTC_Type.R50;
+    Beta = NTC_Type.BETA50_100;
   }
-  else if(Resistance <= _R25) /*25 50*/
+  else if(Resistance <= NTC_Type.R25) /*25 50*/
   {
     Tb = 25;
-    Rb = _R25;
-    Beta = BETA25_50;
+    Rb = NTC_Type.R25;
+    Beta = NTC_Type.BETA25_50;
   }
-  else if(Resistance > _R25) /*25 50*/
+  else if(Resistance > NTC_Type.R25) /*25 50*/
   {
     Tb = 25;
-    Rb = _R25;
-    Beta = BETA25_50;
+    Rb = NTC_Type.R25;
+    Beta = NTC_Type.BETA25_50;
   }
   retVal = (Beta*(273.15 + Tb))/(Beta+((273.15+ Tb)*log(Resistance/Rb)))-273.15;
   return retVal;
@@ -304,10 +318,75 @@ void InitESPNow(void)
 
 void Process_Data_Serial1(void)
 {
+  static uint8_t repSeq;
+  memset(outcomData_uart1,0,100);
+  repSeq = 1;
   if (strstr((char*)Uart_Receive_Cmd_Buff1,"R FF 00000000") != NULL)
   {
-    
+    UART1.printf("> R FF 00000000");
   }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R T1 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R T1 %08.3f ",NTC1.Temperature_C);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R T2 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R T2 %08.3f ",NTC2.Temperature_C);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R T3 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R T3 %08.3f ",TC_K_Temperature);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R T4 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R T4 %08.3f ",NTC4.Temperature_C);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R I1 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R I1 %08.5f ",PS1.Current);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R I2 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R I2 %08.5f ",PS2.Current);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R N1 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R N1 %08.3f ",NTC1.Temperature_C);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R N2 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R N2 %08.3f ",NTC2.Temperature_C);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R N3 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R N3 %08.3f ",NTC3.Temperature_C);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R N4 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R N4 %08.3f ",NTC4.Temperature_C);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R P1 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R P1 %08.5f ",PS1.Pressure);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R P2 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R P2 %08.5f ",PS2.Pressure);
+  }
+  else
+  {
+    repSeq = 0;
+  }
+  if(repSeq == 1)
+  {
+    Uart1_Transceiving = 1;
+    Uart1_Transceiving_tick = millis();
+    repSeq = 0;
+    CRC16_Val_CCIT = CRC.CRC16_CCIT((uint8_t*)outcomData_uart1,16);
+    sprintf(&outcomData_uart1[16],"%05d\r\n",CRC16_Val_CCIT);
+    UART1.print(outcomData_uart1);
+  }
+
 }
 void Serial_Process(void * parameter)
 {
@@ -370,7 +449,7 @@ void Serial_Process(void * parameter)
         }
   
         /* Check enough 2 byte end and stop frame data */
-        if(lucCountEndByte1 == 2)
+        if(lucCountEndByte1 == 2 || Uart_rx1 == 0x0A)
         {
           /* Clear 2 end byte of frame received data */
           memset(Uart_Receive_Cmd_Buff1 + Uart_Receive_Cmd_Buff_Index1 - lucCountEndByte1, '\0', lucCountEndByte1);
@@ -410,35 +489,41 @@ void Serial_Process(void * parameter)
 }
 void ADC_InitValue(void)
 {
-    NTC1.ADC_Raw = ADCi.read(SINGLE_7);
-    NTC1.ADC_Value = NTC1.ADC_Raw;
-    NTC1.Resistance =((float)(NTC1.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC1.ADC_Value));
-    NTC1.Temperature_C = R_To_Temperature(NTC1.Resistance);
+  NTC1.RS = 10000.0;
+  NTC2.RS = 10000.0;
+  NTC3.RS = 10000.0;
+  NTC4.RS = 10000.0;
+  NTC1.ADC_Raw = ADCi.read(SINGLE_7);
+  NTC1.ADC_Value = NTC1.ADC_Raw;
+  NTC1.Resistance =((float)(NTC1.ADC_Value)*_ADC_MAX*NTC1.RS)/(_ADC_MAX*(_ADC_MAX-(float)NTC1.ADC_Value));
+  NTC1.Temperature_C = R_To_Temperature(NTC1.Resistance, NTC100k_3950);
 
-    NTC2.ADC_Raw = ADCi.read(SINGLE_6);
-    NTC2.ADC_Value = NTC2.ADC_Raw;
-    NTC2.Resistance =((float)(NTC2.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC2.ADC_Value));
-    NTC2.Temperature_C = R_To_Temperature(NTC2.Resistance);
+  NTC2.ADC_Raw = ADCi.read(SINGLE_6);
+  NTC2.ADC_Value = NTC2.ADC_Raw;
+  NTC2.Resistance =((float)(NTC2.ADC_Value)*_ADC_MAX*NTC2.RS)/(_ADC_MAX*(_ADC_MAX-(float)NTC2.ADC_Value));
+  NTC2.Temperature_C = R_To_Temperature(NTC2.Resistance, NTC100k_3950);
 
-    NTC3.ADC_Raw = ADCi.read(SINGLE_5);
-    NTC3.ADC_Value = NTC3.ADC_Raw;
-    NTC3.Resistance =((float)(NTC3.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC3.ADC_Value));
-    NTC3.Temperature_C = R_To_Temperature(NTC3.Resistance);
+  NTC3.ADC_Raw = ADCi.read(SINGLE_5);
+  NTC3.ADC_Value = NTC3.ADC_Raw;
+  NTC3.Resistance =((float)(NTC3.ADC_Value)*_ADC_MAX*NTC3.RS)/(_ADC_MAX*(_ADC_MAX-(float)NTC3.ADC_Value));
+  NTC3.Temperature_C = R_To_Temperature(NTC3.Resistance, NTC100k_3950);
 
-    NTC4.ADC_Raw = ADCi.read(SINGLE_4);
-    NTC4.ADC_Value = NTC4.ADC_Raw;
-    NTC4.Resistance =((float)(NTC4.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC4.ADC_Value));
-    NTC4.Temperature_C = R_To_Temperature(NTC4.Resistance);
+  NTC4.ADC_Raw = ADCi.read(SINGLE_4);
+  NTC4.ADC_Value = NTC4.ADC_Raw;
+  NTC4.Resistance =((float)(NTC4.ADC_Value)*_ADC_MAX*NTC4.RS)/(_ADC_MAX*(_ADC_MAX-(float)NTC4.ADC_Value));
+  NTC4.Temperature_C = R_To_Temperature(NTC4.Resistance, NTC100k_3950);
 
-    PS1.ADC_Raw = ADCi.read(SINGLE_0);
-    PS1.ADC_Value = PS1.ADC_Raw;
-    PS1.Voltage = PS1.ADC_Value*_Vref/_ADC_MAX;
-    PS1.Current = PS1.Voltage / PS1.Resistance;
-    
-    PS2.ADC_Raw = ADCi.read(SINGLE_1);
-    PS2.ADC_Value = PS2.ADC_Raw;
-    PS2.Voltage = PS2.ADC_Value*_Vref/_ADC_MAX;
-    PS2.Current = PS2.Voltage / PS2.Resistance;
-
-    TC_K_Temperature = map_value(PS1.Current,4.0,20.0,0,800);
+  PS1.ADC_Raw = ADCi.read(SINGLE_0);
+  PS1.ADC_Value = PS1.ADC_Raw;
+  PS1.Voltage = PS1.ADC_Value*_Vref/_ADC_MAX;
+  PS1.Current = PS1.Voltage / PS1.Resistance;
+  PS1.Pressure = map_value(PS1.Current,4.0,20.0,0.0,10.0);
+  
+  PS2.ADC_Raw = ADCi.read(SINGLE_1);
+  PS2.ADC_Value = PS2.ADC_Raw;
+  PS2.Voltage = PS2.ADC_Value*_Vref/_ADC_MAX;
+  PS2.Current = PS2.Voltage / PS2.Resistance;
+  PS2.Pressure = map_value(PS2.Current,4.0,20.0,0.0,10.0);
+  
+  TC_K_Temperature = map_value(PS1.Current,4.0,20.0,0,800);
 }
