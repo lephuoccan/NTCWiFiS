@@ -307,38 +307,68 @@ void InitESPNow(void)
 
 void Process_Data_Serial1(void)
 {
+  static uint8_t repSeq;
+  memset(outcomData_uart1,0,100);
+  repSeq = 1;
   if (strstr((char*)Uart_Receive_Cmd_Buff1,"R FF 00000000") != NULL)
   {
     UART1.printf("> R FF 00000000");
   }
   else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R T1 00000000") != NULL)
   {
-    memset(outcomData_uart1,0,100);
     sprintf(outcomData_uart1,"> R T1 %08.3f ",NTC1.Temperature_C);
-    CRC16_Val_CCIT = CRC.CRC16_CCIT((uint8_t*)outcomData_uart1,16);
-    sprintf(&outcomData_uart1[16],"%05d\r\n",CRC16_Val_CCIT);
-    UART1.print(outcomData_uart1);
   }
   else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R T2 00000000") != NULL)
   {
-    memset(outcomData_uart1,0,100);
     sprintf(outcomData_uart1,"> R T2 %08.3f ",NTC2.Temperature_C);
-    CRC16_Val_CCIT = CRC.CRC16_CCIT((uint8_t*)outcomData_uart1,16);
-    sprintf(&outcomData_uart1[16],"%05d\r\n",CRC16_Val_CCIT);
-    UART1.print(outcomData_uart1);
   }
   else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R T3 00000000") != NULL)
   {
-    memset(outcomData_uart1,0,100);
     sprintf(outcomData_uart1,"> R T3 %08.3f ",TC_K_Temperature);
-    CRC16_Val_CCIT = CRC.CRC16_CCIT((uint8_t*)outcomData_uart1,16);
-    sprintf(&outcomData_uart1[16],"%05d\r\n",CRC16_Val_CCIT);
-    UART1.print(outcomData_uart1);
   }
   else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R T4 00000000") != NULL)
   {
-    memset(outcomData_uart1,0,100);
     sprintf(outcomData_uart1,"> R T4 %08.3f ",NTC4.Temperature_C);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R I1 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R I1 %08.5f ",PS1.Current);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R I2 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R I2 %08.5f ",PS2.Current);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R N1 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R N1 %08.3f ",NTC1.Temperature_C);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R N2 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R N2 %08.3f ",NTC2.Temperature_C);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R N3 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R N3 %08.3f ",NTC3.Temperature_C);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R N4 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R N4 %08.3f ",NTC4.Temperature_C);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R P1 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R P1 %08.5f ",PS1.Pressure);
+  }
+  else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R P2 00000000") != NULL)
+  {
+    sprintf(outcomData_uart1,"> R P2 %08.5f ",PS2.Pressure);
+  }
+  else
+  {
+    repSeq = 0;
+  }
+  if(repSeq == 1)
+  {
+    repSeq = 0;
     CRC16_Val_CCIT = CRC.CRC16_CCIT((uint8_t*)outcomData_uart1,16);
     sprintf(&outcomData_uart1[16],"%05d\r\n",CRC16_Val_CCIT);
     UART1.print(outcomData_uart1);
@@ -473,11 +503,13 @@ void ADC_InitValue(void)
   PS1.ADC_Value = PS1.ADC_Raw;
   PS1.Voltage = PS1.ADC_Value*_Vref/_ADC_MAX;
   PS1.Current = PS1.Voltage / PS1.Resistance;
+  PS1.Pressure = map_value(PS1.Current,4.0,20.0,0.0,10.0);
   
   PS2.ADC_Raw = ADCi.read(SINGLE_1);
   PS2.ADC_Value = PS2.ADC_Raw;
   PS2.Voltage = PS2.ADC_Value*_Vref/_ADC_MAX;
   PS2.Current = PS2.Voltage / PS2.Resistance;
-
+  PS2.Pressure = map_value(PS2.Current,4.0,20.0,0.0,10.0);
+  
   TC_K_Temperature = map_value(PS1.Current,4.0,20.0,0,800);
 }
