@@ -62,6 +62,8 @@ uint8_t lucaEndByte1[2] = {'\r','\n'};
 uint8_t lucCountEndByte1 = 0;
 uint8_t Luc_Ret1;
 char outcomData_uart1[100];
+uint8_t Uart1_Transceiving = 0;
+uint32_t Uart1_Transceiving_tick = 0;
 /********************************************************************************/
 void InitESPNow(void);
 void ADC_InitValue(void);
@@ -220,24 +222,33 @@ void loop() {
     CRC16_Val = CRC.CRC16_Modbus(outcomData,len_tmp);
     sprintf((char*)&outcomData[len_tmp],"%05d\r\n",CRC16_Val);
     UART_Debug.println((char*)outcomData);
-    esp_err_t result = esp_now_send(MAC_Dest, (uint8_t *) &outcomData[0], strlen((char*)outcomData));
-    if (result != ESP_OK)
+    if(Uart1_Transceiving == 0)
     {
-      UART_Debug.print("Send Status: ");
-      if (result == ESP_ERR_ESPNOW_NOT_INIT) {
-        // How did we get so far!!
-        UART_Debug.println("ESPNOW not Init.");
-      } else if (result == ESP_ERR_ESPNOW_ARG) {
-        UART_Debug.println("Invalid Argument");
-      } else if (result == ESP_ERR_ESPNOW_INTERNAL) {
-        UART_Debug.println("Internal Error");
-      } else if (result == ESP_ERR_ESPNOW_NO_MEM) {
-        UART_Debug.println("ESP_ERR_ESPNOW_NO_MEM");
-      } else if (result == ESP_ERR_ESPNOW_NOT_FOUND) {
-        UART_Debug.println("Peer not found.");
-      } else {
-        UART_Debug.println("Not sure what happened");
+      UART1.println("Send ESP now");
+      esp_err_t result = esp_now_send(MAC_Dest, (uint8_t *) &outcomData[0], strlen((char*)outcomData));
+      if (result != ESP_OK)
+      {
+        UART_Debug.print("Send Status: ");
+        if (result == ESP_ERR_ESPNOW_NOT_INIT) {
+          // How did we get so far!!
+          UART_Debug.println("ESPNOW not Init.");
+        } else if (result == ESP_ERR_ESPNOW_ARG) {
+          UART_Debug.println("Invalid Argument");
+        } else if (result == ESP_ERR_ESPNOW_INTERNAL) {
+          UART_Debug.println("Internal Error");
+        } else if (result == ESP_ERR_ESPNOW_NO_MEM) {
+          UART_Debug.println("ESP_ERR_ESPNOW_NO_MEM");
+        } else if (result == ESP_ERR_ESPNOW_NOT_FOUND) {
+          UART_Debug.println("Peer not found.");
+        } else {
+          UART_Debug.println("Not sure what happened");
+        }
       }
+    }
+    if(millis() - Uart1_Transceiving_tick >= 5000)
+    {
+      Uart1_Transceiving = 0;
+      Uart1_Transceiving_tick = millis();
     }
     tick_espnow = millis();
   }
@@ -368,11 +379,14 @@ void Process_Data_Serial1(void)
   }
   if(repSeq == 1)
   {
+    Uart1_Transceiving = 1;
+    Uart1_Transceiving_tick = millis();
     repSeq = 0;
     CRC16_Val_CCIT = CRC.CRC16_CCIT((uint8_t*)outcomData_uart1,16);
     sprintf(&outcomData_uart1[16],"%05d\r\n",CRC16_Val_CCIT);
     UART1.print(outcomData_uart1);
   }
+
 }
 void Serial_Process(void * parameter)
 {
