@@ -20,18 +20,6 @@ static const int spiClk = 1000000;   /*SPI clock 1 MHz*/
 iMCP3208 ADCi(14,12,13,NSS,spiClk);
 const float _Vref = 3300;            /*Vref mV*/
 const float _ADC_MAX = 4095;         /* ADC 12bit */
-const float _R1 = 10000.0;
-const float _R25 = 100000.0;
-const float _R50 = 35899.9;
-const float _R100 = 6710.0;
-const float _R150 = 1770.0;
-const float _R300 = 105.6;
-
-const float BETA25_50 = 3948.06;
-const float BETA50_100 = 4044.69;
-const float BETA100_150 = 4208.37;
-const float BETA150_300 = 4504.0;
-
 const float Comfilter = 0.999;
 
 NTC_Typedef NTC1;
@@ -87,23 +75,23 @@ void ADC_Process(void * parameter)
   {
     NTC1.ADC_Raw = ADCi.read(SINGLE_7);
     NTC1.ADC_Value = Comfilter*NTC1.ADC_Value + (1-Comfilter)*NTC1.ADC_Raw;
-    NTC1.Resistance =((float)(NTC1.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC1.ADC_Value));
-    NTC1.Temperature_C = R_To_Temperature(NTC1.Resistance);
+    NTC1.Resistance =((float)(NTC1.ADC_Value)*_ADC_MAX*NTC1.RS)/(_ADC_MAX*(_ADC_MAX-(float)NTC1.ADC_Value));
+    NTC1.Temperature_C = R_To_Temperature(NTC1.Resistance, NTC100k_3950);
 
     NTC2.ADC_Raw = ADCi.read(SINGLE_6);
     NTC2.ADC_Value = Comfilter*NTC2.ADC_Value + (1-Comfilter)*NTC2.ADC_Raw;
-    NTC2.Resistance =((float)(NTC2.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC2.ADC_Value));
-    NTC2.Temperature_C = R_To_Temperature(NTC2.Resistance);
+    NTC2.Resistance =((float)(NTC2.ADC_Value)*_ADC_MAX*NTC2.RS)/(_ADC_MAX*(_ADC_MAX-(float)NTC2.ADC_Value));
+    NTC2.Temperature_C = R_To_Temperature(NTC2.Resistance, NTC100k_3950);
 
     NTC3.ADC_Raw = ADCi.read(SINGLE_5);
     NTC3.ADC_Value = Comfilter*NTC3.ADC_Value + (1-Comfilter)*NTC3.ADC_Raw;
-    NTC3.Resistance =((float)(NTC3.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC3.ADC_Value));
-    NTC3.Temperature_C = R_To_Temperature(NTC3.Resistance);
+    NTC3.Resistance =((float)(NTC3.ADC_Value)*_ADC_MAX*NTC3.RS)/(_ADC_MAX*(_ADC_MAX-(float)NTC3.ADC_Value));
+    NTC3.Temperature_C = R_To_Temperature(NTC3.Resistance, NTC100k_3950);
 
     NTC4.ADC_Raw = ADCi.read(SINGLE_4);
     NTC4.ADC_Value = Comfilter*NTC4.ADC_Value + (1-Comfilter)*NTC4.ADC_Raw;
-    NTC4.Resistance =((float)(NTC4.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC4.ADC_Value));
-    NTC4.Temperature_C = R_To_Temperature(NTC4.Resistance);
+    NTC4.Resistance =((float)(NTC4.ADC_Value)*_ADC_MAX*NTC4.RS)/(_ADC_MAX*(_ADC_MAX-(float)NTC4.ADC_Value));
+    NTC4.Temperature_C = R_To_Temperature(NTC4.Resistance, NTC100k_3950);
 
     PS1.ADC_Raw = ADCi.read(SINGLE_0);
     PS1.ADC_Value = Comfilter*PS1.ADC_Value + (1-Comfilter)*PS1.ADC_Raw;
@@ -263,39 +251,39 @@ float map_value(float x, float in_min, float in_max, float out_min, float out_ma
 {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
-float R_To_Temperature(float Resistance)
+float R_To_Temperature(float Resistance, NTCType_Typedef NTC_Type)
 {
   float Tb,Rb,Beta;
   float retVal;
-  if(Resistance <= _R150) /*150 300*/
+  if(Resistance <= NTC_Type.R150) /*150 300*/
   {
     Tb = 150;
-    Rb = _R150;
-    Beta = BETA150_300;
+    Rb = NTC_Type.R150;
+    Beta = NTC_Type.BETA150_300;
   }
-  else if(Resistance <= _R100) /*100 150*/
+  else if(Resistance <= NTC_Type.R100) /*100 150*/
   {
     Tb = 100;
-    Rb = _R100;
-    Beta = BETA100_150;
+    Rb = NTC_Type.R100;
+    Beta = NTC_Type.BETA100_150;
   }
-  else if(Resistance <= _R50) /*50 100*/
+  else if(Resistance <= NTC_Type.R50) /*50 100*/
   {
     Tb = 50;
-    Rb = _R50;
-    Beta = BETA50_100;
+    Rb = NTC_Type.R50;
+    Beta = NTC_Type.BETA50_100;
   }
-  else if(Resistance <= _R25) /*25 50*/
+  else if(Resistance <= NTC_Type.R25) /*25 50*/
   {
     Tb = 25;
-    Rb = _R25;
-    Beta = BETA25_50;
+    Rb = NTC_Type.R25;
+    Beta = NTC_Type.BETA25_50;
   }
-  else if(Resistance > _R25) /*25 50*/
+  else if(Resistance > NTC_Type.R25) /*25 50*/
   {
     Tb = 25;
-    Rb = _R25;
-    Beta = BETA25_50;
+    Rb = NTC_Type.R25;
+    Beta = NTC_Type.BETA25_50;
   }
   retVal = (Beta*(273.15 + Tb))/(Beta+((273.15+ Tb)*log(Resistance/Rb)))-273.15;
   return retVal;
@@ -457,35 +445,39 @@ void Serial_Process(void * parameter)
 }
 void ADC_InitValue(void)
 {
-    NTC1.ADC_Raw = ADCi.read(SINGLE_7);
-    NTC1.ADC_Value = NTC1.ADC_Raw;
-    NTC1.Resistance =((float)(NTC1.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC1.ADC_Value));
-    NTC1.Temperature_C = R_To_Temperature(NTC1.Resistance);
+  NTC1.RS = 10000.0;
+  NTC2.RS = 10000.0;
+  NTC3.RS = 10000.0;
+  NTC4.RS = 10000.0;
+  NTC1.ADC_Raw = ADCi.read(SINGLE_7);
+  NTC1.ADC_Value = NTC1.ADC_Raw;
+  NTC1.Resistance =((float)(NTC1.ADC_Value)*_ADC_MAX*NTC1.RS)/(_ADC_MAX*(_ADC_MAX-(float)NTC1.ADC_Value));
+  NTC1.Temperature_C = R_To_Temperature(NTC1.Resistance, NTC100k_3950);
 
-    NTC2.ADC_Raw = ADCi.read(SINGLE_6);
-    NTC2.ADC_Value = NTC2.ADC_Raw;
-    NTC2.Resistance =((float)(NTC2.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC2.ADC_Value));
-    NTC2.Temperature_C = R_To_Temperature(NTC2.Resistance);
+  NTC2.ADC_Raw = ADCi.read(SINGLE_6);
+  NTC2.ADC_Value = NTC2.ADC_Raw;
+  NTC2.Resistance =((float)(NTC2.ADC_Value)*_ADC_MAX*NTC2.RS)/(_ADC_MAX*(_ADC_MAX-(float)NTC2.ADC_Value));
+  NTC2.Temperature_C = R_To_Temperature(NTC2.Resistance, NTC100k_3950);
 
-    NTC3.ADC_Raw = ADCi.read(SINGLE_5);
-    NTC3.ADC_Value = NTC3.ADC_Raw;
-    NTC3.Resistance =((float)(NTC3.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC3.ADC_Value));
-    NTC3.Temperature_C = R_To_Temperature(NTC3.Resistance);
+  NTC3.ADC_Raw = ADCi.read(SINGLE_5);
+  NTC3.ADC_Value = NTC3.ADC_Raw;
+  NTC3.Resistance =((float)(NTC3.ADC_Value)*_ADC_MAX*NTC3.RS)/(_ADC_MAX*(_ADC_MAX-(float)NTC3.ADC_Value));
+  NTC3.Temperature_C = R_To_Temperature(NTC3.Resistance, NTC100k_3950);
 
-    NTC4.ADC_Raw = ADCi.read(SINGLE_4);
-    NTC4.ADC_Value = NTC4.ADC_Raw;
-    NTC4.Resistance =((float)(NTC4.ADC_Value)*_ADC_MAX*_R1)/(_ADC_MAX*(_ADC_MAX-(float)NTC4.ADC_Value));
-    NTC4.Temperature_C = R_To_Temperature(NTC4.Resistance);
+  NTC4.ADC_Raw = ADCi.read(SINGLE_4);
+  NTC4.ADC_Value = NTC4.ADC_Raw;
+  NTC4.Resistance =((float)(NTC4.ADC_Value)*_ADC_MAX*NTC4.RS)/(_ADC_MAX*(_ADC_MAX-(float)NTC4.ADC_Value));
+  NTC4.Temperature_C = R_To_Temperature(NTC4.Resistance, NTC100k_3950);
 
-    PS1.ADC_Raw = ADCi.read(SINGLE_0);
-    PS1.ADC_Value = PS1.ADC_Raw;
-    PS1.Voltage = PS1.ADC_Value*_Vref/_ADC_MAX;
-    PS1.Current = PS1.Voltage / PS1.Resistance;
-    
-    PS2.ADC_Raw = ADCi.read(SINGLE_1);
-    PS2.ADC_Value = PS2.ADC_Raw;
-    PS2.Voltage = PS2.ADC_Value*_Vref/_ADC_MAX;
-    PS2.Current = PS2.Voltage / PS2.Resistance;
+  PS1.ADC_Raw = ADCi.read(SINGLE_0);
+  PS1.ADC_Value = PS1.ADC_Raw;
+  PS1.Voltage = PS1.ADC_Value*_Vref/_ADC_MAX;
+  PS1.Current = PS1.Voltage / PS1.Resistance;
+  
+  PS2.ADC_Raw = ADCi.read(SINGLE_1);
+  PS2.ADC_Value = PS2.ADC_Raw;
+  PS2.Voltage = PS2.ADC_Value*_Vref/_ADC_MAX;
+  PS2.Current = PS2.Voltage / PS2.Resistance;
 
-    TC_K_Temperature = map_value(PS1.Current,4.0,20.0,0,800);
+  TC_K_Temperature = map_value(PS1.Current,4.0,20.0,0,800);
 }

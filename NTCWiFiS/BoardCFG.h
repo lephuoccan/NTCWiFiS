@@ -30,14 +30,32 @@
 
 #define NTC_SR_OC       /*NTC open circuit*/
 #define NTC_SR_DRDY      /*NTC Data ready*/
+
 typedef struct
 {
+  float RS;             /*Potential divider resistor*/
   int ADC_Raw;          /*ADC raw value*/
   float ADC_Value;      /*ADC Value after 50Hz notch filter*/
   float Resistance;     /*Resistance (Ohm unit)*/
   float Temperature_C;  /*Temperature value in C*/
   uint8_t SR;           /*Status register*/
+  
 } NTC_Typedef;
+
+typedef struct
+{
+  const float RS;             /*Potential divider resistor*/
+  const float R25;            /*Resistance of Thermistor at 25°C, Must have value*/
+  const float R50;            /*Resistance of Thermistor at 50°C, Must have value*/
+  const float R100;           /*Resistance of Thermistor at 100°C, Must have value*/
+  const float R150;           /*Resistance of Thermistor at 150°C, Optional value, 0 = don't care*/
+  const float R300;           /*Resistance of Thermistor at 300°C, Optional value, 0 = don't care*/
+  const float BETA25_50;      
+  const float BETA50_100;
+  const float BETA100_150;
+  const float BETA150_300;
+} NTCType_Typedef;
+
 typedef struct
 {
   int ADC_Raw;          /*ADC raw value*/
@@ -48,3 +66,28 @@ typedef struct
   float Pressure;       /*Pressure in Bar*/
   uint8_t SR;           /*Status register*/
 } PS_Typedef;
+
+NTCType_Typedef NTC100k_3950 = {
+  .RS = 10000.0,
+  .R25 = 100000.0,
+  .R50 = 35899.9,
+  .R100 = 6710.0,
+  .R150 = 1770.0,
+  .R300 = 105.6,
+  .BETA25_50 = 3948.06,
+  .BETA50_100 = 4044.69,
+  .BETA100_150 = 4208.37,
+  .BETA150_300 = 4504.0
+};
+NTCType_Typedef NTC10k_3950 = {
+  .RS = 10000.0,
+  .R25 = 10000.0,
+  .R50 = 3588.0,
+  .R100 = 674.4,
+  .R150 = 0,
+  .R300 = 0,
+  .BETA25_50 = 3950.20,
+  .BETA50_100 = 4031.17,
+  .BETA100_150 = 0,
+  .BETA150_300 = 0
+};
