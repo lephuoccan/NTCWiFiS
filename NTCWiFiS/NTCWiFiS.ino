@@ -11,7 +11,8 @@ extern "C"{
 #include <esp_WiFi.h>
 #include <esp_now.h>
 #include <EEPROM.h>
-
+#include <otadrive_esp.h>
+#include "ifacSetting.h"
 #define NSS 26
 #define FLASH_MEMORY_SIZE 512
 
@@ -34,6 +35,8 @@ float TC_K_Temperature;
 uint32_t smps,c_smps;
 uint32_t micro;
 /********************************************************************************/
+/*OTA Variable*/
+uint8_t MAIN_FW_Update_Flag = 0; /*ESP32 FW update Flag, Received from HMI command, Saved and Load from NVS Flash, self clear when update successfully*/
 /*CRC Variables*/
 ifacCRC CRC;
 uint16_t CRC16_Val;
@@ -68,7 +71,9 @@ uint32_t Uart1_Transceiving_tick = 0;
 void InitESPNow(void);
 void ADC_InitValue(void);
 float map_value(float x, float in_min, float in_max, float out_min, float out_max);
-
+void OTADRIVE_UPDATE(String Version,int OTA_WIFI_timeout);
+void listDir(fs::FS &fs, const char *dirname, uint8_t levels);
+void onUpdateProgress(int progress, int totalt);
 void ADC_Process(void * parameter)
 {
   vTaskDelay(1000 / portTICK_PERIOD_MS); /*Delay 1000ms*/
@@ -178,6 +183,18 @@ void setup() {
   esp_wifi_set_ps(WIFI_PS_NONE);    /* No power save */
   PS1.Resistance = 150.0;
   PS2.Resistance = 150.0;
+  /*Read ESP32 FW update flag from NVS Flash*/
+  MAIN_FW_Update_Flag = EEPROM.read(101);
+  UART_Debug.print("MAIN FW UPDATE FLAG:");
+  UART_Debug.println((int)MAIN_FW_Update_Flag);
+  
+  if(MAIN_FW_Update_Flag == 1)
+  {
+    OTADRIVE_UPDATE(SENSOR_FIRMWARE_VERSION,30);
+    MAIN_FW_Update_Flag = 0;
+    EEPROM.write(101,0);
+    EEPROM.commit();
+  }
   
   InitESPNow();
   esp_now_register_send_cb(OnDataSent);
@@ -526,4 +543,145 @@ void ADC_InitValue(void)
   PS2.Pressure = map_value(PS2.Current,4.0,20.0,0.0,10.0);
   
   TC_K_Temperature = map_value(PS1.Current,4.0,20.0,0,800);
+}
+void OTADRIVE_UPDATE(String Version,int OTA_WIFI_timeout)
+{
+  int time_out=0;
+  // Wifi IFACTORY connectting
+  WiFi.begin("ifactory", "ifactory");
+  Serial.println("Connect to OTA wifi - ifactory - then check new FirmWare ");
+//  UART_HMI.print("t_stt.txt=\"Connect to OTA wifi - ifactory\"");
+//  UART_HMI.write(0xFF);UART_HMI.write(0xFF);UART_HMI.write(0xFF);
+  while ((WiFi.status() != WL_CONNECTED) && (time_out<OTA_WIFI_timeout))
+    {
+      
+      Serial.print(".");
+//      digitalWrite(LED1, HIGH);
+      delay(100);
+//      digitalWrite(LED1, LOW);
+      delay(200);
+      time_out++;
+    }
+  // Wifi IFACTORY not found !
+  if (time_out == OTA_WIFI_timeout) { 
+    Serial.println("");
+    Serial.print("Connect to OTA wifi - ifactory - failed ! ");
+    Serial.print("Return to next code !");
+    Serial.println("");
+//    UART_HMI.print("t_stt.txt=\"Connect to OTA wifi - failed\"");
+//    UART_HMI.write(0xFF);UART_HMI.write(0xFF);UART_HMI.write(0xFF);
+    return; // Exit OTAUPDATE_DRIVE
+    }
+
+
+
+  // Wifi IFACTORY connected !
+    Serial.print("Wifi OTA connected : ");
+    Serial.println(WiFi.localIP());
+//    UART_HMI.print("t_stt.txt=\"Wifi OTA connected\"");
+//    UART_HMI.write(0xFF);UART_HMI.write(0xFF);UART_HMI.write(0xFF);
+  // initialize FileSystem
+              OTADRIVE.setFileSystem(&FILESYS);
+            #ifdef ESP8266
+              if (!LittleFS.begin())
+              {
+                Serial.println("LittleFS Mount Failed");
+                LittleFS.format();
+                return;
+              }
+            #elif defined(ESP32)
+              if (!SPIFFS.begin(true))
+              {
+                Serial.println("SPIFFS Mount Failed");
+                return;
+              }
+            #endif
+              Serial.println("File system Mounted");
+
+    //**********************************************************************************************************************************
+    //
+    //                                                                OTA DRIVE 
+    
+    
+    OTADRIVE.setInfo(OTA_APIKEY, Version);
+
+    OTADRIVE.onUpdateFirmwareProgress(onUpdateProgress);
+
+
+  // retrive firmware info from OTA drive server
+
+
+        updateInfo inf = OTADRIVE.updateFirmwareInfo();
+        Serial.printf("\nFirmware info: %s ,%dBytes\n%s\n",
+                      inf.version.c_str(), inf.size, inf.available ? "New version available" : "No newer version");
+        // update firmware if newer available
+        if (inf.available)
+          OTADRIVE.updateFirmware();
+        // sync local files with OTAdrive server
+        OTADRIVE.syncResources();
+        // list local files to serial port
+        listDir(FILESYS, "/", 0);
+        WiFi.disconnect();
+
+  //**************************************************************************************************************************************
+}
+void onUpdateProgress(int progress, int totalt)
+{
+  static int last = 0;
+  int progressPercent = (100 * progress) / totalt;
+  Serial.print("*");
+//  UART_HMI.printf("t_pc.txt=\"%d%%\"",progressPercent);
+//  UART_HMI.write(0xFF);UART_HMI.write(0xFF);UART_HMI.write(0xFF);
+//  UART_HMI.printf("j0.val=%d",progressPercent);
+//  UART_HMI.write(0xFF);UART_HMI.write(0xFF);UART_HMI.write(0xFF);
+  if (last != progressPercent && progressPercent % 10 == 0)
+  {
+    //print every 10%
+    Serial.printf("%d", progressPercent);
+  }
+  if(progressPercent == 100)
+  {
+//    UART_HMI.print("vis b_ok,1");UART_HMI.write(0xFF);UART_HMI.write(0xFF);UART_HMI.write(0xFF);
+//    UART_HMI.print("vis b_exit,1");UART_HMI.write(0xFF);UART_HMI.write(0xFF);UART_HMI.write(0xFF);
+  }
+  last = progressPercent;
+}
+
+void listDir(fs::FS &fs, const char *dirname, uint8_t levels)
+{
+  Serial.printf("Listing directory: %s\r\n", dirname);
+
+  File root = fs.open(dirname, "r");
+  if (!root)
+  {
+    Serial.println("- failed to open directory");
+    return;
+  }
+  if (!root.isDirectory())
+  {
+    Serial.println(" - not a directory");
+    return;
+  }
+
+  File file = root.openNextFile();
+  while (file)
+  {
+    if (file.isDirectory())
+    {
+      Serial.print("  DIR : ");
+      Serial.println(file.name());
+      if (levels)
+      {
+        listDir(fs, file.name(), levels - 1);
+      }
+    }
+    else
+    {
+      Serial.print("  FILE: ");
+      Serial.print(file.name());
+      Serial.print("\tSIZE: ");
+      Serial.println(file.size());
+    }
+    file = root.openNextFile();
+  }
 }
