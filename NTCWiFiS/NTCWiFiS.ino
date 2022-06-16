@@ -230,6 +230,17 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   static uint32_t tick_espnow = 0;
+  if(digitalRead(0) == 0 && MAIN_FW_Update_Flag != 2)
+  {
+    MAIN_FW_Update_Flag = 1;
+  }
+  if(MAIN_FW_Update_Flag == 1)
+  {
+    UART_Debug.println("Upfirmware");
+    MAIN_FW_Update_Flag = 2;
+    EEPROM.write(101,1);
+    EEPROM.commit();
+  }
   if(millis() - tick_espnow >= 1000)
   {
     memset(outcomData,0,outcomData_maxlen);
@@ -389,6 +400,18 @@ void Process_Data_Serial1(void)
   else if (strstr((char*)Uart_Receive_Cmd_Buff1,"R P2 00000000") != NULL)
   {
     sprintf(outcomData_uart1,"> R P2 %08.5f ",PS2.Pressure);
+  }
+  else if(strstr((char*)Uart_Receive_Cmd_Buff1,"MACS:") != NULL)
+  {
+    UART1.print((char*)Uart_Receive_Cmd_Buff1);
+    memcpy(MAC_Dest,&Uart_Receive_Cmd_Buff1[5],6);
+    EEPROM.write(0,MAC_Dest[0]);
+    EEPROM.write(1,MAC_Dest[1]);
+    EEPROM.write(2,MAC_Dest[2]);
+    EEPROM.write(3,MAC_Dest[3]);
+    EEPROM.write(4,MAC_Dest[4]);
+    EEPROM.write(5,MAC_Dest[5]);
+    EEPROM.commit();
   }
   else
   {
