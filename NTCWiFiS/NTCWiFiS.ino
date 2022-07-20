@@ -165,7 +165,15 @@ void setup() {
   MAC_Dest[3] = EEPROM.readByte(3);
   MAC_Dest[4] = EEPROM.readByte(4);
   MAC_Dest[5] = EEPROM.readByte(5);
-  
+  if((MAC_Dest[0] == 0xFF) && (MAC_Dest[1] == 0xFF)&& (MAC_Dest[2] == 0xFF)&& (MAC_Dest[3] == 0xFF)&& (MAC_Dest[4] == 0xFF)&& (MAC_Dest[5] == 0xFF))
+  {
+    MAC_Dest[0] = 0x12;
+    MAC_Dest[1] = 0x34;
+    MAC_Dest[2] = 0x56;
+    MAC_Dest[3] = 0x78;
+    MAC_Dest[4] = 0x99;
+    MAC_Dest[5] = 0xAA;
+  }
   UART_Debug.print("MACDest: ");
   UART_Debug.print(MAC_Dest[5],HEX);
   UART_Debug.print(":");
